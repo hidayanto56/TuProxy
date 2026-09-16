@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TuProxy</string>
+    <string name="proxy_service_description">Melayankan proxy HTTP/HTTPS/SOCKS5 lokal</string>
+</resources>
