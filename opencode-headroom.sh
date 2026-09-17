@@ -2,6 +2,9 @@
 set -e
 cd "$(dirname "$0")"
 
+# Muat secret dari .env (file ini di-gitignore, jangan hardcode key di script)
+if [ -f .env ]; then set -a; . ./.env; set +a; fi
+
 # OpenCode via Headroom proxy (hemat token) -> upstream OpenRouter.
 #   ./opencode-headroom.sh              # serve 0.0.0.0:4096 + TUI lokal
 #   PORT=5096 ./opencode-headroom.sh    # port lain
@@ -51,7 +54,8 @@ export LITELLM_INSECURE_SKIP_VERIFY="true"
 if [ -f "/Users/admin/.config/opencode/certs/gp-ca.pem" ]; then
     export NODE_EXTRA_CA_CERTS="/Users/admin/.config/opencode/certs/gp-ca.pem"
 fi
-export OPENROUTER_API_KEY="REDACTED_OPENROUTER_KEY"
+: "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY kosong — isi di .env (file di-gitignore)}"
+export OPENROUTER_API_KEY
 export P_CONFIG="/Users/admin/.config/opencode/opencode.json"
 export OPENCODE_CONFIG="$P_CONFIG"
 
@@ -90,19 +94,30 @@ echo "headroom-openrouter jalan di :$HP_PORT (backend openrouter, egress via $UP
 # Tes fungsional end-to-end (chat completion 1 token pada model :free = $0).
 # /v1/models TIDAK bisa jadi patokan: di image ini endpoint itu selalu diteruskan
 # ke default api.openai.com (menghasilkan "Incorrect API key") apa pun --backend-nya.
-# Yang menentukan adalah /v1/chat/completions — terbukti 200 via backend openrouter.
-if ! curl -s -m 60 -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+# Yang menentukan adalah /v1/chat/completions.
+# Catatan: 429 "free-models-per-day" dari OpenRouter BUKAN kegagalan rantai —
+# justru bukti tembus (respons upstream asli). Yang habis hanya kuota harian
+# model gratis (50/hari); model berbayar tetap jalan.
+HR_RESP="$(curl -s -m 60 -H "Authorization: Bearer $OPENROUTER_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"nex-agi/nex-n2.5-mini:free","messages":[{"role":"user","content":"ping"}],"max_tokens":1}' \
-  "http://127.0.0.1:$HP_PORT/v1/chat/completions" | grep -q '"choices"'; then
-    echo "PERINGATAN: headroom belum tembus ke OpenRouter. Cek manual:"
-    echo "  curl -s -H \"Authorization: Bearer ...\" http://127.0.0.1:$HP_PORT/stats | head -c 300"
+  "http://127.0.0.1:$HP_PORT/v1/chat/completions")"
+if echo "$HR_RESP" | grep -q '"choices"'; then
+    echo "headroom tembus ke OpenRouter (chat completions 200)."
+    USE_HEADROOM=1
+elif echo "$HR_RESP" | grep -q 'free-models-per-day'; then
+    RESET="$(echo "$HR_RESP" | grep -o 'X-RateLimit-Reset[^0-9]*[0-9]*' | grep -o '[0-9]*' | head -n 1)"
+    [ -n "$RESET" ] && RESET=" (reset $(date -r $((RESET / 1000)) '+%d %b %H:%M' 2>/dev/null || echo "$RESET"))"
+    echo "headroom tembus, tapi kuota harian model GRATIS habis$RESET."
+    echo "Lanjut dengan headroom (model berbayar tetap jalan)."
+    USE_HEADROOM=1
+else
+    echo "PERINGATAN: headroom belum tembus ke OpenRouter. Respons:"
+    echo "$HR_RESP" | head -c 400
+    echo
     echo "Lanjut tanpa headroom? (Enter = lanjut, Ctrl-C = batal)"
     read -r _
     USE_HEADROOM=0
-else
-    echo "headroom tembus ke OpenRouter (chat completions 200)."
-    USE_HEADROOM=1
 fi
 
 # --- arahkan provider openai OpenCode ke headroom (lengkap, bukan terpotong) ---
