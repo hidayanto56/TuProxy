@@ -9,7 +9,11 @@ app/build/
 local.properties
 
 # Python
-try:
-    __pycache__/
-    *.pyc
-    .DS_Store
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Secrets lokal — jangan commit
+.env

@@ -2,6 +2,9 @@
 set -e
 cd "$(dirname "$0")"
 
+# Muat secret dari .env (file ini di-gitignore, jangan hardcode key di script)
+if [ -f .env ]; then set -a; . ./.env; set +a; fi
+
 # Bersihkan variabel pembajak routing cloud & proxy HP peninggalan mode lokal
 unset OPENCODE_API_KEY
 unset OPENAI_API_KEY
@@ -40,7 +43,8 @@ export LITELLM_INSECURE_SKIP_VERIFY="true"
 if [ -f "/Users/admin/.config/opencode/certs/gp-ca.pem" ]; then
     export NODE_EXTRA_CA_CERTS="/Users/admin/.config/opencode/certs/gp-ca.pem"
 fi
-export OPENROUTER_API_KEY="REDACTED_OPENROUTER_KEY"
+: "${OPENROUTER_API_KEY:?OPENROUTER_API_KEY kosong — isi di .env (file di-gitignore)}"
+export OPENROUTER_API_KEY
 # Jalur berkas konfigurasi resmi OpenCode 2.0
 export P_CONFIG="/Users/admin/.config/opencode/opencode.json"
 export OPENCODE_CONFIG="$P_CONFIG"
