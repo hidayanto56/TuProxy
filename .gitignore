@@ -7,7 +7,7 @@ app/build/
 
 # Local SDK path
 local.properties
-
+claude.sh
 # Python
 __pycache__/
 *.pyc
