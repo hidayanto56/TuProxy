@@ -10,6 +10,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.tustudio.tuproxy.ui.ProxyDashboard
 import com.tustudio.tuproxy.ui.TuProxyTheme
+import com.tustudio.tuproxy.billing.BillingManager
+import com.tustudio.tuproxy.utils.ReviewHelper
 import com.google.android.gms.ads.MobileAds
 
 class MainActivity : ComponentActivity() {
@@ -18,12 +20,19 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // AdMob: async init; banner degrades to a slim placeholder when offline.
         MobileAds.initialize(this) {}
+        BillingManager.init(this)
         requestNotificationPermission()
         setContent {
             TuProxyTheme {
                 ProxyDashboard()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        BillingManager.refreshPro()
+        ReviewHelper.onAppForeground(this)
     }
 
     /** Android 13+ requires runtime opt-in for status notifications. */

@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.tustudio.tuproxy.MainActivity
+import com.tustudio.tuproxy.engine.ConnectionLog
 import com.tustudio.tuproxy.engine.ProxyEngine
 import com.tustudio.tuproxy.engine.TrafficStats
 import com.tustudio.tuproxy.utils.formatBytes
@@ -244,6 +245,7 @@ class ProxyService : Service() {
         scope.cancel()
         ProxyEngine.stopAll()
         TrafficStats.reset()
+        ConnectionLog.clear()
         _uiState.value = ProxyUiState()
         super.onDestroy()
     }

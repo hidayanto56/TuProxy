@@ -67,6 +67,11 @@ Current version: `versionCode = 2`, `versionName = "1.1"`. Bump `versionCode` (+
 ## 9. Pre-upload sanity
 - [ ] Real AdMob IDs in, test ad label gone on release
 - [ ] `versionCode` bumped
-- [ ] `./build.sh bundle` succeeds, `bundletool`/`apks` install check on Android 9 + 14
+- [ ] `./build.sh bundle` succeeds, install check on Android 9 + 14
 - [ ] Toggles, copy buttons, chart, rotation, dark theme, notification Stop action verified
+- [ ] QS tile: add via notification shade edit, toggle on/off, state follows service
+- [ ] Connection log populates during real proxy use; Clear works
+- [ ] In-App Review triggers on 3rd/10th/25th open (Play quota applies)
+- [ ] Remove-ads product `tuproxy_remove_ads` created in Play Console if selling Pro
+- [ ] Privacy policy URL live; link it in Console + data-safety form
 - [ ] No secrets in repo (`grep -r "sk-or" --exclude-dir=.git .` empty, `.env` untracked)

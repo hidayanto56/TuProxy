@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -52,6 +53,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tustudio.tuproxy.R
+import com.tustudio.tuproxy.billing.BillingManager
+import com.tustudio.tuproxy.engine.ConnEntry
+import com.tustudio.tuproxy.engine.ConnectionLog
 import com.tustudio.tuproxy.engine.ProxyEngine
 import com.tustudio.tuproxy.services.ProxyService
 import com.tustudio.tuproxy.utils.IPUtils
@@ -64,8 +68,12 @@ private val Red = Color(0xFFF85149)
 fun ProxyDashboard() {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val activity = context as? android.app.Activity
     val state by ProxyService.uiState.collectAsState()
+    val connections by ConnectionLog.flow.collectAsState()
+    val pro by BillingManager.pro.collectAsState()
     var ips by remember { mutableStateOf<List<String>>(emptyList()) }
+    var showPrivacy by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         ips = IPUtils.getAvailableIPv4Addresses(context)
@@ -80,9 +88,12 @@ fun ProxyDashboard() {
         android.widget.Toast.makeText(context, "Copied: $addr", android.widget.Toast.LENGTH_SHORT)
             .show()
     }
+    fun toast(msg: String) {
+        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+    }
 
     Scaffold(
-        bottomBar = { AdBanner() },
+        bottomBar = { if (!pro) AdBanner() },
     ) { innerPadding ->
         Surface(
             modifier = Modifier
@@ -102,6 +113,9 @@ fun ProxyDashboard() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Header(anyOn = anyOn)
+                    if (showPrivacy) {
+                        PrivacyDialog(onDismiss = { showPrivacy = false })
+                    }
 
                     if (wide) {
                         // Tablet / landscape: two balanced columns.
@@ -152,12 +166,36 @@ fun ProxyDashboard() {
                     }
 
                     StatusLine(anyOn = anyOn, running = state.running)
+                    if (connections.isNotEmpty()) {
+                        ConnectionLogCard(connections)
+                    }
                     Text(
                         "Free local proxy for testing & development.",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        TextButton(onClick = { showPrivacy = true }) {
+                            Text("Privacy Policy", fontSize = 12.sp)
+                        }
+                        if (!pro) {
+                            TextButton(
+                                onClick = {
+                                    if (activity != null) {
+                                        BillingManager.buyRemoveAds(activity, ::toast)
+                                    } else {
+                                        toast("Purchase unavailable right now.")
+                                    }
+                                }
+                            ) {
+                                Text("Remove ads", fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -340,8 +378,85 @@ private fun IdleCard() {
 }
 
 @Composable
-private fun StatusLine(anyOn: Boolean, running: Set<String>) {
-    Text(
+private fun ConnectionLogCard(connections: List<ConnEntry>) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SectionTitle("Recent connections")
+                TextButton(onClick = { ConnectionLog.clear() }) {
+                    Text("Clear", fontSize = 12.sp)
+                }
+            }
+            connections.take(12).forEach { e ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    StatusDot(
+                        when {
+                            e.failed -> Red
+                            e.done -> Color.Gray
+                            else -> Green
+                        }
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "${e.type.uppercase()}  ${e.target}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            "↓ ${formatBytes(e.rx)} · ↑ ${formatBytes(e.tx)} · ${formatTime(e.startMs)}" +
+                                if (e.failed) " · failed" else if (e.done) "" else " · live",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatTime(ms: Long): String {
+    return try {
+        java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US)
+            .format(java.util.Date(ms))
+    } catch (_: Exception) {
+        ""
+    }
+}
+
+@Composable
+private fun PrivacyDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Privacy Policy", fontWeight = FontWeight.Bold) },
+        text = {
+            Text(
+                "TuProxy relays network traffic locally on your device and " +
+                    "collects no personal data, with no accounts and no analytics of its own.\n\n" +
+                    "Ads (AdMob by Google) may collect the advertising ID and device " +
+                    "info to serve and measure ads.\n\n" +
+                    "The local proxy sees the hosts you connect to while it is ON; " +
+                    "nothing is uploaded anywhere. Turn all toggles off to stop serving.\n\n" +
+                    "Full text: PRIVACY_POLICY.md in the project repo and the Play listing.",
+                fontSize = 13.sp,
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
+private fun StatusLine(anyOn: Boolean, running: Set<String>) {    Text(
         if (anyOn) "RUNNING [${running.sorted().joinToString("+") { it.uppercase() }}]" else "STOPPED — all proxies off",
         fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold,

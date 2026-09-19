@@ -18,7 +18,7 @@ private const val MAX_HEAD_BYTES = 65_536
 private const val BUF_SIZE = 8 * 1024
 
 /** Pumps bytes from [input] to [output]. Counts towards rx (client->net) or tx (net->client). */
-private fun pump(input: InputStream, output: OutputStream, toRx: Boolean) {
+private fun pump(input: InputStream, output: OutputStream, toRx: Boolean, connId: Long = -1L) {
     val buf = ByteArray(BUF_SIZE)
     try {
         while (true) {
@@ -26,7 +26,13 @@ private fun pump(input: InputStream, output: OutputStream, toRx: Boolean) {
             if (n < 0) break
             output.write(buf, 0, n)
             output.flush()
-            if (toRx) TrafficStats.addRx(n.toLong()) else TrafficStats.addTx(n.toLong())
+            if (toRx) {
+                TrafficStats.addRx(n.toLong())
+                ConnectionLog.addBytes(connId, rx = n.toLong(), tx = 0L)
+            } else {
+                TrafficStats.addTx(n.toLong())
+                ConnectionLog.addBytes(connId, rx = 0L, tx = n.toLong())
+            }
         }
     } catch (_: Exception) {
         // peer closed / timeout / listener stopped — normal for a proxy
@@ -135,6 +141,8 @@ private fun dial(host: String, port: Int): Socket {
 
 /** HTTP proxy. Also answers CONNECT (https tunneling). connectOnly=true -> CONNECT saja. */
 private class HttpProxyListener(port: Int, private val connectOnly: Boolean) : TcpListener(port) {
+    private fun connType() = if (connectOnly) "https" else "http"
+
     override fun handle(client: Socket) {
         client.soTimeout = 20_000
         val cin = client.getInputStream()
@@ -150,19 +158,26 @@ private class HttpProxyListener(port: Int, private val connectOnly: Boolean) : T
         if (method == "CONNECT") {
             val hp = target.split(":")
             if (hp.size != 2) return
+            val dest = "${hp[0]}:${hp[1]}"
             val remote = try {
                 dial(hp[0], hp[1].toInt())
             } catch (_: Exception) {
+                ConnectionLog.failed(connType(), dest)
                 return
             }
-            remote.use {
-                val ok = "HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray()
-                cout.write(ok); cout.flush()
-                TrafficStats.addTx(ok.size.toLong())
-                client.soTimeout = IDLE_TIMEOUT_MS
-                val t1 = Thread { pump(cin, it.getOutputStream(), toRx = true) }.apply { isDaemon = true }
-                val t2 = Thread { pump(it.getInputStream(), cout, toRx = false) }.apply { isDaemon = true }
-                t1.start(); t2.start(); t1.join(); t2.join()
+            val id = ConnectionLog.start(connType(), dest)
+            try {
+                remote.use {
+                    val ok = "HTTP/1.1 200 Connection Established\r\n\r\n".toByteArray()
+                    cout.write(ok); cout.flush()
+                    TrafficStats.addTx(ok.size.toLong())
+                    client.soTimeout = IDLE_TIMEOUT_MS
+                    val t1 = Thread { pump(cin, it.getOutputStream(), toRx = true, connId = id) }.apply { isDaemon = true }
+                    val t2 = Thread { pump(it.getInputStream(), cout, toRx = false, connId = id) }.apply { isDaemon = true }
+                    t1.start(); t2.start(); t1.join(); t2.join()
+                }
+            } finally {
+                ConnectionLog.finish(id)
             }
             return
         }
@@ -192,24 +207,30 @@ private class HttpProxyListener(port: Int, private val connectOnly: Boolean) : T
         val remote = try {
             dial(host, remotePort)
         } catch (_: Exception) {
+            ConnectionLog.failed(connType(), "$host:$remotePort")
             return
         }
-        remote.use {
-            val rout = it.getOutputStream()
-            rout.write(fwdHead); rout.flush()
-            TrafficStats.addRx(fwdHead.size.toLong())
-            // Teruskan body request bila ada (POST/PUT). Sisa buffer over-read = 0 di implementasi ini.
-            val tUp = Thread { pump(cin, rout, toRx = true) }.apply { isDaemon = true }
-            tUp.start()
-            try {
-                pump(it.getInputStream(), cout, toRx = false)
-            } finally {
+        val id = ConnectionLog.start(connType(), "$host:$remotePort")
+        try {
+            remote.use {
+                val rout = it.getOutputStream()
+                rout.write(fwdHead); rout.flush()
+                TrafficStats.addRx(fwdHead.size.toLong())
+                // Teruskan body request bila ada (POST/PUT). Sisa buffer over-read = 0 di implementasi ini.
+                val tUp = Thread { pump(cin, rout, toRx = true, connId = id) }.apply { isDaemon = true }
+                tUp.start()
                 try {
-                    remote.shutdownOutput()
-                } catch (_: Exception) {
+                    pump(it.getInputStream(), cout, toRx = false, connId = id)
+                } finally {
+                    try {
+                        remote.shutdownOutput()
+                    } catch (_: Exception) {
+                    }
+                    tUp.join(2_000)
                 }
-                tUp.join(2_000)
             }
+        } finally {
+            ConnectionLog.finish(id)
         }
     }
 }
@@ -264,15 +285,21 @@ private class Socks5Listener(port: Int) : TcpListener(port) {
         val remote = try {
             dial(host, remotePort)
         } catch (_: Exception) {
+            ConnectionLog.failed("socks", "$host:$remotePort")
             cout.write(byteArrayOf(0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0)); cout.flush()
             return
         }
-        remote.use {
-            cout.write(byteArrayOf(0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0)); cout.flush()
-            client.soTimeout = IDLE_TIMEOUT_MS
-            val t1 = Thread { pump(cin, it.getOutputStream(), toRx = true) }.apply { isDaemon = true }
-            val t2 = Thread { pump(it.getInputStream(), cout, toRx = false) }.apply { isDaemon = true }
-            t1.start(); t2.start(); t1.join(); t2.join()
+        val id = ConnectionLog.start("socks", "$host:$remotePort")
+        try {
+            remote.use {
+                cout.write(byteArrayOf(0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0)); cout.flush()
+                client.soTimeout = IDLE_TIMEOUT_MS
+                val t1 = Thread { pump(cin, it.getOutputStream(), toRx = true, connId = id) }.apply { isDaemon = true }
+                val t2 = Thread { pump(it.getInputStream(), cout, toRx = false, connId = id) }.apply { isDaemon = true }
+                t1.start(); t2.start(); t1.join(); t2.join()
+            }
+        } finally {
+            ConnectionLog.finish(id)
         }
     }
 
