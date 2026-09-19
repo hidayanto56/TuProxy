@@ -74,6 +74,7 @@ fun ProxyDashboard() {
     val pro by BillingManager.pro.collectAsState()
     var ips by remember { mutableStateOf<List<String>>(emptyList()) }
     var showPrivacy by remember { mutableStateOf(false) }
+    var showDonate by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         ips = IPUtils.getAvailableIPv4Addresses(context)
@@ -115,6 +116,19 @@ fun ProxyDashboard() {
                     Header(anyOn = anyOn)
                     if (showPrivacy) {
                         PrivacyDialog(onDismiss = { showPrivacy = false })
+                    }
+                    if (showDonate) {
+                        DonateDialog(
+                            onDismiss = { showDonate = false },
+                            onPick = { productId ->
+                                showDonate = false
+                                if (activity != null) {
+                                    BillingManager.donate(activity, productId, ::toast)
+                                } else {
+                                    toast("Purchase unavailable right now.")
+                                }
+                            },
+                        )
                     }
 
                     if (wide) {
@@ -181,6 +195,9 @@ fun ProxyDashboard() {
                     ) {
                         TextButton(onClick = { showPrivacy = true }) {
                             Text("Privacy Policy", fontSize = 12.sp)
+                        }
+                        TextButton(onClick = { showDonate = true }) {
+                            Text("Support", fontSize = 12.sp)
                         }
                         if (!pro) {
                             TextButton(
@@ -453,6 +470,41 @@ private fun PrivacyDialog(onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text("Close") }
         },
     )
+}
+
+@Composable
+private fun DonateDialog(onDismiss: () -> Unit, onPick: (String) -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Support TuProxy", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "TuProxy is free. A one-time tip keeps it alive — you can tip again anytime.",
+                    fontSize = 13.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                DonateTierButton("☕ Small tip", BillingManager.PRODUCT_DONATE_SMALL, onPick)
+                DonateTierButton("🍱 Medium tip", BillingManager.PRODUCT_DONATE_MEDIUM, onPick)
+                DonateTierButton("🚀 Large tip", BillingManager.PRODUCT_DONATE_LARGE, onPick)
+                Text(
+                    "Prices are set in your local currency by Google Play.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        },
+    )
+}
+
+@Composable
+private fun DonateTierButton(label: String, productId: String, onPick: (String) -> Unit) {
+    TextButton(onClick = { onPick(productId) }) {
+        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
 }
 
 @Composable

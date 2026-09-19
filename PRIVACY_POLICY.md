@@ -1,6 +1,8 @@
 # Privacy Policy — TuProxy
 
-Last updated: 2026-09-19. Contact: [YOUR SUPPORT EMAIL]
+Last updated: 2026-09-19. Contact: use the developer contact email shown
+on this app's Google Play listing, or the Issues page of the TuProxy
+GitHub repository.
 
 ## Summary
 TuProxy is a local proxy server that runs entirely on your device. We collect

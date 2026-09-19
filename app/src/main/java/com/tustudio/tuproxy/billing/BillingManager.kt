@@ -24,6 +24,12 @@ import kotlinx.coroutines.flow.asStateFlow
 object BillingManager {
     const val PRODUCT_REMOVE_ADS = "tuproxy_remove_ads"
 
+    /** Consumable one-time tips; buyers can repeat them. Prices are set in Play Console. */
+    const val PRODUCT_DONATE_SMALL = "tuproxy_donate_small"
+    const val PRODUCT_DONATE_MEDIUM = "tuproxy_donate_medium"
+    const val PRODUCT_DONATE_LARGE = "tuproxy_donate_large"
+    val DONATE_PRODUCTS = listOf(PRODUCT_DONATE_SMALL, PRODUCT_DONATE_MEDIUM, PRODUCT_DONATE_LARGE)
+
     private val _pro = MutableStateFlow(false)
     val pro: StateFlow<Boolean> = _pro.asStateFlow()
 
@@ -87,9 +93,65 @@ object BillingManager {
     }
 
     private fun handlePurchase(purchase: Purchase) {
-        if (!purchase.products.contains(PRODUCT_REMOVE_ADS)) return
-        if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
-            _pro.value = true
+        if (purchase.products.contains(PRODUCT_REMOVE_ADS)) {
+            if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED) {
+                _pro.value = true
+                if (!purchase.isAcknowledged) acknowledge(purchase)
+            }
+            return
+        }
+        // Donations are consumable so supporters can tip again.
+        if (purchase.products.any { it in DONATE_PRODUCTS } &&
+            purchase.purchaseState == Purchase.PurchaseState.PURCHASED
+        ) {
+            consume(purchase)
+        }
+    }
+
+    private fun acknowledge(purchase: Purchase) {
+        val c = client ?: return
+        c.acknowledgePurchase(
+            com.android.billingclient.api.AcknowledgePurchaseParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken)
+                .build()
+        ) { _ -> }
+    }
+
+    private fun consume(purchase: Purchase) {
+        val c = client ?: return
+        c.consumeAsync(
+            com.android.billingclient.api.ConsumeParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken)
+                .build()
+        ) { _, _ -> }
+    }
+
+    /** One-off tip of any tier; message explains setup until products exist. */
+    fun donate(activity: Activity, productId: String, onMessage: (String) -> Unit) {
+        val c = client
+        if (c == null || !c.isReady) {
+            connect {
+                if (c?.isReady == true) donate(activity, productId, onMessage)
+                else onMessage("Billing unavailable — check your connection and try again.")
+            }
+            return
+        }
+        val params = QueryProductDetailsParams.newBuilder()
+            .setProductList(
+                listOf(
+                    QueryProductDetailsParams.Product.newBuilder()
+                        .setProductId(productId)
+                        .setProductType(BillingClient.ProductType.INAPP)
+                        .build()
+                )
+            )
+            .build()
+        c.queryProductDetailsAsync(params) { result, details ->
+            if (result.responseCode != BillingClient.BillingResponseCode.OK || details.isEmpty()) {
+                onMessage("Donations aren't set up yet — create \"$productId\" in Play Console first.")
+                return@queryProductDetailsAsync
+            }
+            launchFlow(activity, details.first(), onMessage)
         }
     }
 

@@ -73,5 +73,7 @@ Current version: `versionCode = 2`, `versionName = "1.1"`. Bump `versionCode` (+
 - [ ] Connection log populates during real proxy use; Clear works
 - [ ] In-App Review triggers on 3rd/10th/25th open (Play quota applies)
 - [ ] Remove-ads product `tuproxy_remove_ads` created in Play Console if selling Pro
+- [ ] Donation products `tuproxy_donate_small/medium/large` (consumable, one-time)
+  created in Play Console if enabling Support tips
 - [ ] Privacy policy URL live; link it in Console + data-safety form
 - [ ] No secrets in repo (`grep -r "sk-or" --exclude-dir=.git .` empty, `.env` untracked)
