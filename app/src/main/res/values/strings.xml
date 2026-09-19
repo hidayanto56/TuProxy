@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TuProxy</string>
-    <string name="proxy_service_description">Melayankan proxy HTTP/HTTPS/SOCKS5 lokal</string>
+    <string name="proxy_service_description">Serves local HTTP/HTTPS/SOCKS5 proxy</string>
+    <!-- AdMob: replace with your real IDs before publishing to Google Play. Test IDs below. -->
+    <string name="admob_app_id">ca-app-pub-4298199558809105~4371418403</string>
+    <string name="admob_banner_id">ca-app-pub-4298199558809105/1930369151</string>
 </resources>

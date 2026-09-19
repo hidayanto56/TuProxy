@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TuProxy build script — bungkus ./gradlew + cek prasyarat.
-# Pakai: ./build.sh [debug|release|clean|install]   (default: debug)
+# Pakai: ./build.sh [debug|release|bundle|clean|install]   (default: debug)
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -8,6 +8,7 @@ cd "$(dirname "$0")"
 MODE="${1:-debug}"
 APK_DEBUG="app/build/outputs/apk/debug/app-debug.apk"
 APK_RELEASE="app/build/outputs/apk/release/app-release.apk"
+AAB_RELEASE="app/build/outputs/bundle/release/app-release.aab"
 APK_RELEASE_APK="/Users/admin/Downloads/TuProxy.apk"
 
 # 1. JDK 17+
@@ -43,6 +44,11 @@ case "$MODE" in
     ./gradlew :app:assembleRelease --console=plain
     echo "OK: $APK_RELEASE ($(du -h "$APK_RELEASE" | cut -f1))"
     ;;
+  bundle)
+    ./gradlew :app:bundleRelease --console=plain
+    echo "OK: $AAB_RELEASE ($(du -h "$AAB_RELEASE" | cut -f1))"
+    echo "Upload this AAB to Google Play (signed only if TUPROXY_STORE_* env is set)."
+    ;;
   clean)
     ./gradlew clean --console=plain
     echo "OK: build dibersihkan."
@@ -52,7 +58,7 @@ case "$MODE" in
     echo "OK: terinstall di device."
     ;;
   *)
-    echo "Pakai: $0 [debug|release|clean|install]" >&2
+    echo "Pakai: $0 [debug|release|bundle|clean|install]" >&2
     exit 2
     ;;
 esac

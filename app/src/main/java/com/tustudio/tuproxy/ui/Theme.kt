@@ -1,4 +1,4 @@
-package com.example.tuproxy.ui
+package com.tustudio.tuproxy.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme

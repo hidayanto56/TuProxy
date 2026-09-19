@@ -1,4 +1,4 @@
-package com.example.tuproxy.utils
+package com.tustudio.tuproxy.utils
 
 import android.content.Context
 import android.net.wifi.WifiManager

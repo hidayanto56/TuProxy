@@ -1,4 +1,4 @@
-package com.example.tuproxy.engine
+package com.tustudio.tuproxy.engine
 
 import java.util.concurrent.atomic.AtomicLong
 

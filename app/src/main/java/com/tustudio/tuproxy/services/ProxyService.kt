@@ -1,4 +1,4 @@
-package com.example.tuproxy.services
+package com.tustudio.tuproxy.services
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -11,10 +11,10 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.example.tuproxy.MainActivity
-import com.example.tuproxy.engine.ProxyEngine
-import com.example.tuproxy.engine.TrafficStats
-import com.example.tuproxy.utils.formatBytes
+import com.tustudio.tuproxy.MainActivity
+import com.tustudio.tuproxy.engine.ProxyEngine
+import com.tustudio.tuproxy.engine.TrafficStats
+import com.tustudio.tuproxy.utils.formatBytes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,23 +33,30 @@ data class ProxyUiState(
     val txRate: Long = 0L,
     val rxTotal: Long = 0L,
     val txTotal: Long = 0L,
-    /** Riwayat 30 titik (rx, tx) bytes/detik, untuk grafik. */
+    /** Last 60 (rx, tx) bytes/sec points for the chart. */
     val history: List<Pair<Long, Long>> = emptyList(),
 )
 
 /**
- * Foreground service pemilik [ProxyEngine]. Hidup selama >=1 proxy ON,
- * mati + reset statistik saat semua toggle OFF.
+ * Foreground service owning [ProxyEngine]. Lives while >= 1 proxy is ON,
+ * stops + resets stats when every toggle is OFF.
+ *
+ * Notifications:
+ * - RUNNING: ongoing foreground notification with live rates + Stop action.
+ * - STOPPED: one dismissible status notification so users can always tell
+ *   whether the proxy is running, even after the service stops.
  */
 class ProxyService : Service() {
 
     companion object {
-        const val ACTION_UPDATE = "com.example.tuproxy.action.UPDATE"
+        const val ACTION_UPDATE = "com.tustudio.tuproxy.action.UPDATE"
+        const val ACTION_STOP_ALL = "com.tustudio.tuproxy.action.STOP_ALL"
         const val EXTRA_TYPE = "type"
         const val EXTRA_ENABLED = "enabled"
 
         private const val CHANNEL_ID = "tuproxy_channel"
         private const val NOTIFICATION_ID = 101
+        private const val STOPPED_NOTIFICATION_ID = 102
         private const val HISTORY_MAX = 60
 
         private val _uiState = MutableStateFlow(ProxyUiState())
@@ -60,6 +67,17 @@ class ProxyService : Service() {
                 action = ACTION_UPDATE
                 putExtra(EXTRA_TYPE, type)
                 putExtra(EXTRA_ENABLED, enabled)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        fun stopAll(context: Context) {
+            val intent = Intent(context, ProxyService::class.java).apply {
+                action = ACTION_STOP_ALL
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -82,19 +100,27 @@ class ProxyService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_UPDATE) {
-            val type = intent.getStringExtra(EXTRA_TYPE) ?: return START_STICKY
-            val enabled = intent.getBooleanExtra(EXTRA_ENABLED, false)
-            if (enabled) ProxyEngine.start(type) else ProxyEngine.stop(type)
+        when (intent?.action) {
+            ACTION_STOP_ALL -> {
+                ProxyEngine.stopAll()
+            }
+            ACTION_UPDATE -> {
+                val type = intent.getStringExtra(EXTRA_TYPE) ?: return START_STICKY
+                val enabled = intent.getBooleanExtra(EXTRA_ENABLED, false)
+                if (enabled) ProxyEngine.start(type) else ProxyEngine.stop(type)
+            }
         }
 
         val running = ProxyEngine.runningTypes()
         if (running.isEmpty()) {
+            cancelNotification(NOTIFICATION_ID)
+            showStoppedNotification()
             stopSelf()
             return START_NOT_STICKY
         }
 
-        startForegroundCompat(buildNotification(running, 0L, 0L))
+        cancelNotification(STOPPED_NOTIFICATION_ID)
+        startForegroundCompat(buildRunningNotification(running, 0L, 0L))
         ensureTicker(running)
         return START_STICKY
     }
@@ -119,6 +145,8 @@ class ProxyService : Service() {
                 delay(1_000)
                 val cur = ProxyEngine.runningTypes()
                 if (cur.isEmpty()) {
+                    cancelNotification(NOTIFICATION_ID)
+                    showStoppedNotification()
                     stopSelf()
                     break
                 }
@@ -133,7 +161,7 @@ class ProxyService : Service() {
                     rxTotal = rx, txTotal = tx,
                     history = (_uiState.value.history + (rxRate to txRate)).takeLast(HISTORY_MAX),
                 )
-                nm.notify(NOTIFICATION_ID, buildNotification(cur, rxRate, txRate))
+                nm.notify(NOTIFICATION_ID, buildRunningNotification(cur, rxRate, txRate))
             }
         }
     }
@@ -143,27 +171,61 @@ class ProxyService : Service() {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(
                 NotificationChannel(
-                    CHANNEL_ID, "TuProxy", NotificationManager.IMPORTANCE_LOW
-                ).apply { description = "Proxy lokal + trafik live" }
+                    CHANNEL_ID, "TuProxy status", NotificationManager.IMPORTANCE_LOW
+                ).apply { description = "Local proxy status and live traffic" }
             )
         }
     }
 
-    private fun buildNotification(running: Set<String>, rxRate: Long, txRate: Long): Notification {
-        val names = running.sorted().joinToString("+") { it.uppercase() }
-        val text = "↓ ${formatBytes(rxRate)}/s  ↑ ${formatBytes(txRate)}/s"
-        val pi = PendingIntent.getActivity(
+    private fun contentIntent(): PendingIntent =
+        PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+
+    private fun stopAllIntent(): PendingIntent {
+        val intent = Intent(this, ProxyService::class.java).apply { action = ACTION_STOP_ALL }
+        return PendingIntent.getService(
+            this, 1, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun buildRunningNotification(
+        running: Set<String>,
+        rxRate: Long,
+        txRate: Long,
+    ): Notification {
+        val names = running.sorted().joinToString("+") { it.uppercase() }
+        val text = "↓ ${formatBytes(rxRate)}/s  ↑ ${formatBytes(txRate)}/s — tap to manage"
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("TuProxy [$names] ON")
+            .setContentTitle("TuProxy [$names] is running")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_share)
-            .setContentIntent(pi)
+            .setContentIntent(contentIntent())
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopAllIntent())
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
+    }
+
+    private fun showStoppedNotification() {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("TuProxy is stopped")
+            .setContentText("All proxies are off — tap to start")
+            .setSmallIcon(android.R.drawable.ic_menu_share)
+            .setContentIntent(contentIntent())
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        nm.notify(STOPPED_NOTIFICATION_ID, notification)
+    }
+
+    private fun cancelNotification(id: Int) {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.cancel(id)
     }
 
     private fun startForegroundCompat(notification: Notification) {

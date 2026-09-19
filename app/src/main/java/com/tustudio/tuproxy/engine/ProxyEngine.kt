@@ -1,4 +1,4 @@
-package com.example.tuproxy.engine
+package com.tustudio.tuproxy.engine
 
 import java.io.ByteArrayOutputStream
 import java.io.InputStream

@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.example.tuproxy"
-    compileSdk = 34
+    namespace = "com.tustudio.tuproxy"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.tuproxy"
+        applicationId = "com.tustudio.tuproxy"
         minSdk = 28
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 35
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -22,6 +22,24 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+    // Upload-key signing via env vars (never commit secrets).
+    // TUPROXY_STORE_FILE / TUPROXY_STORE_PASSWORD / TUPROXY_KEY_ALIAS / TUPROXY_KEY_PASSWORD
+    val storeFileEnv = System.getenv("TUPROXY_STORE_FILE")
+    if (storeFileEnv != null) {
+        signingConfigs {
+            create("play") {
+                storeFile = file(storeFileEnv)
+                storePassword = System.getenv("TUPROXY_STORE_PASSWORD")
+                keyAlias = System.getenv("TUPROXY_KEY_ALIAS")
+                keyPassword = System.getenv("TUPROXY_KEY_PASSWORD")
+            }
+        }
+        buildTypes {
+            named("release") {
+                signingConfig = signingConfigs.getByName("play")
+            }
         }
     }
     compileOptions {
@@ -50,4 +68,5 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("com.google.android.gms:play-services-ads:23.2.0")
 }
