@@ -343,7 +343,7 @@ private fun ProxyCard(
 private fun TrafficCard(rxRate: Long, txRate: Long, rxTotal: Long, txTotal: Long) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            SectionTitle("Traffic in / out")
+            SectionTitle("Traffic")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Meter("↓ IN", "${formatBytes(rxRate)}/s", Green)
                 Meter("↑ OUT", "${formatBytes(txRate)}/s", Red)
@@ -362,7 +362,7 @@ private fun TrafficCard(rxRate: Long, txRate: Long, rxTotal: Long, txTotal: Long
 private fun ChartCard(history: List<Pair<Long, Long>>) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
-            SectionTitle("Per-second chart")
+            SectionTitle("Chart")
             TrafficChart(history)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Legend(Green, "In")

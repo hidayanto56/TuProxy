@@ -22,11 +22,13 @@ import com.google.android.gms.ads.AdListener
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.AdSize
 import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.AdSize.SMART_BANNER
 
 /**
  * Non-intrusive anchored banner at the very bottom of the screen.
- * Fixed 50dp height; collapses to a slim placeholder when the ad
- * fails to load (offline / no fill), so the layout never jumps.
+ * Uses SMART_BANNER — auto‑adapts width to device screen, so layout never jumps
+ * on phones of any size or orientation. Fixed 50dp height; collapses to a slim
+ * placeholder when the ad fails to load (offline / no fill), so the layout never jumps.
  * Replace @string/admob_banner_id with your production unit before release.
  */
 @Composable
@@ -55,7 +57,7 @@ fun AdBanner(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 factory = { ctx ->
                     AdView(ctx).apply {
-                        setAdSize(AdSize.BANNER)
+                        setAdSize(SMART_BANNER)
                         this.adUnitId = unitId
                         visibility = View.VISIBLE
                         adListener = object : AdListener() {
