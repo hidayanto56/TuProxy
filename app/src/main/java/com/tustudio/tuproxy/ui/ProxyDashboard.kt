@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +64,12 @@ import com.tustudio.tuproxy.utils.formatBytes
 
 private val Green = Color(0xFF3FB950)
 private val Red = Color(0xFFF85149)
+
+/** Full privacy-policy text. Hosted live; same URL goes in Play Console. */
+const val PRIVACY_POLICY_URL = "https://github.com/hidayanto56/TuProxy/blob/main/PRIVACY_POLICY.md"
+
+/** Donations stay hidden until products are created + quota allows. */
+private const val ENABLE_DONATIONS = false
 
 @Composable
 fun ProxyDashboard() {
@@ -196,8 +203,10 @@ fun ProxyDashboard() {
                         TextButton(onClick = { showPrivacy = true }) {
                             Text("Privacy Policy", fontSize = 12.sp)
                         }
-                        TextButton(onClick = { showDonate = true }) {
-                            Text("Support", fontSize = 12.sp)
+                        if (ENABLE_DONATIONS) {
+                            TextButton(onClick = { showDonate = true }) {
+                                Text("Support", fontSize = 12.sp)
+                            }
                         }
                         if (!pro) {
                             TextButton(
@@ -451,6 +460,7 @@ private fun formatTime(ms: Long): String {
 
 @Composable
 private fun PrivacyDialog(onDismiss: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Privacy Policy", fontWeight = FontWeight.Bold) },
@@ -461,12 +471,14 @@ private fun PrivacyDialog(onDismiss: () -> Unit) {
                     "Ads (AdMob by Google) may collect the advertising ID and device " +
                     "info to serve and measure ads.\n\n" +
                     "The local proxy sees the hosts you connect to while it is ON; " +
-                    "nothing is uploaded anywhere. Turn all toggles off to stop serving.\n\n" +
-                    "Full text: PRIVACY_POLICY.md in the project repo and the Play listing.",
+                    "nothing is uploaded anywhere. Turn all toggles off to stop serving.",
                 fontSize = 13.sp,
             )
         },
         confirmButton = {
+            TextButton(onClick = { uriHandler.openUri(PRIVACY_POLICY_URL) }) { Text("Full policy") }
+        },
+        dismissButton = {
             TextButton(onClick = onDismiss) { Text("Close") }
         },
     )

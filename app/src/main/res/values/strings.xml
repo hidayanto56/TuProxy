@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">TuProxy</string>
     <string name="proxy_service_description">Serves local HTTP/HTTPS/SOCKS5 proxy</string>
-    <!-- AdMob: replace with your real IDs before publishing to Google Play. Test IDs below. -->
+    <!-- AdMob production IDs. Same IDs go in the AdMob console (app linked to Play listing). -->
     <string name="admob_app_id">ca-app-pub-4298199558809105~4371418403</string>
     <string name="admob_banner_id">ca-app-pub-4298199558809105/1930369151</string>
 </resources>
