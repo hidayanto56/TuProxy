@@ -45,7 +45,11 @@ object BillingManager {
         }
         client = BillingClient.newBuilder(context.applicationContext)
             .setListener(listener)
-            .enablePendingPurchases()
+            .enablePendingPurchases(
+                com.android.billingclient.api.PendingPurchasesParams.newBuilder()
+                    .enableOneTimeProducts()
+                    .build()
+            )
             .build()
         connect { refreshPro() }
     }
@@ -69,7 +73,8 @@ object BillingManager {
                 )
             )
             .build()
-        c.queryProductDetailsAsync(params) { result, details ->
+        c.queryProductDetailsAsync(params) { result, queryResult ->
+            val details = queryResult.productDetailsList
             if (result.responseCode != BillingClient.BillingResponseCode.OK || details.isEmpty()) {
                 onMessage("Remove-ads product not found yet — create \"$PRODUCT_REMOVE_ADS\" in Play Console first.")
                 return@queryProductDetailsAsync
@@ -146,7 +151,8 @@ object BillingManager {
                 )
             )
             .build()
-        c.queryProductDetailsAsync(params) { result, details ->
+        c.queryProductDetailsAsync(params) { result, queryResult ->
+            val details = queryResult.productDetailsList
             if (result.responseCode != BillingClient.BillingResponseCode.OK || details.isEmpty()) {
                 onMessage("Donations aren't set up yet — create \"$productId\" in Play Console first.")
                 return@queryProductDetailsAsync
